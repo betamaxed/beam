@@ -37,7 +37,22 @@ each input collection.
 See more information in the [Beam Programming Guide](/documentation/programming-guide/#cogroupbykey).
 
 ## Examples
-See [BEAM-7390](https://issues.apache.org/jira/browse/BEAM-7390) for updates. 
+In the following example, we create a pipeline with two `PCollection`s of key-value pairs. Then, we apply `CoGroupByKey` to group the two `PCollection`s by key into a single `PCollection`.
+
+{{< highlight py >}}
+{{< code_sample "sdks/python/apache_beam/examples/snippets/transforms/aggregation/cogroupbykey.py" cogroupbykey >}}
+{{< /highlight >}}
+
+{{< paragraph class="notebook-skip" >}}
+Output `PCollection` after `CoGroupByKey`:
+{{< /paragraph >}}
+
+{{< highlight class="notebook-skip" >}}
+{{< code_sample "sdks/python/apache_beam/examples/snippets/transforms/aggregation/cogroupbykey_test.py" plants >}}
+{{< /highlight >}}
+
+{{< buttons-code-snippet
+  py="sdks/python/apache_beam/examples/snippets/transforms/aggregation/cogroupbykey.py"
 
 ## Related transforms
 * [CombineGlobally](/documentation/transforms/python/aggregation/combineglobally) to combine elements.
