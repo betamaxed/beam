@@ -568,19 +568,24 @@ public class Snippets {
   private static final Logger LOG = LoggerFactory.getLogger(Snippets.class);
 
   // [START SideInputPatternSlowUpdateGlobalWindowSnip1]
-  public static void sideInputPatterns() {
+  public static PCollection<KV<Long, Long>> sideInputPatterns(
+          Pipeline p,
+          Duration fixedWindowDuration,
+          int sideInputMultiple) {
     // This pipeline uses View.asSingleton for a placeholder external service.
     // Run in debug mode to see the output.
-    Pipeline p = Pipeline.create();
 
-    // Create a side input that updates each second.
+    // Create a side input that updates five times slower than the consumer side.
     PCollectionView<Map<String, String>> map =
-        p.apply(GenerateSequence.from(0).withRate(1, Duration.standardSeconds(5L)))
-            .apply(
+        p.apply("Slow Generator",
+                GenerateSequence
+                        .from(0)
+                        .withRate(1, fixedWindowDuration.multipliedBy(sideInputMultiple)))
+            .apply("Global Window",
                 Window.<Long>into(new GlobalWindows())
                     .triggering(Repeatedly.forever(AfterProcessingTime.pastFirstElementInPane()))
                     .discardingFiredPanes())
-            .apply(
+            .apply("Read External Data",
                 ParDo.of(
                     new DoFn<Long, Map<String, String>>() {
 
@@ -589,24 +594,30 @@ public class Snippets {
                           @Element Long input, OutputReceiver<Map<String, String>> o) {
                         // Replace map with test data from the placeholder external service.
                         // Add external reads here.
-                        o.output(PlaceholderExternalService.readTestData());
+                        o.output(PlaceholderExternalService.readTestData(input));
                       }
                     }))
             .apply(View.asSingleton());
 
     // Consume side input. GenerateSequence generates test data.
     // Use a real source (like PubSubIO or KafkaIO) in production.
-    p.apply(GenerateSequence.from(0).withRate(1, Duration.standardSeconds(1L)))
-        .apply(Window.into(FixedWindows.of(Duration.standardSeconds(1))))
-        .apply(Sum.longsGlobally().withoutDefaults())
-        .apply(
-            ParDo.of(
+    return p.apply("Fast Generator", GenerateSequence.from(0).withRate(1, fixedWindowDuration))
+            .apply("Fixed Window", Window.into(FixedWindows.of(fixedWindowDuration)))
+            .apply(Sum.longsGlobally().withoutDefaults())
+            .apply("Process Side Input",
+              ParDo.of(
                     new DoFn<Long, KV<Long, Long>>() {
 
                       @ProcessElement
                       public void process(ProcessContext c) {
                         Map<String, String> keyMap = c.sideInput(map);
-                        c.outputWithTimestamp(KV.of(1L, c.element()), Instant.now());
+                        long sideInputIndex = Long.parseLong(keyMap.get("Key_A"));
+
+                        c.outputWithTimestamp(KV.of(c.element(), sideInputIndex), Instant.now());
+
+                        System.out.println(c.element());
+                        System.out.println(keyMap.get("Key_A"));
+                        System.out.println(keyMap.get("Key_B"));
 
                         LOG.debug(
                             "Value is {}, key A is {}, and key B is {}.",
@@ -621,14 +632,12 @@ public class Snippets {
   /** Placeholder class that represents an external service generating test data. */
   public static class PlaceholderExternalService {
 
-    public static Map<String, String> readTestData() {
+    public static Map<String, String> readTestData(long i) {
 
       Map<String, String> map = new HashMap<>();
       Instant now = Instant.now();
 
-      DateTimeFormatter dtf = DateTimeFormat.forPattern("HH:MM:SS");
-
-      map.put("Key_A", now.minus(Duration.standardSeconds(30)).toString(dtf));
+      map.put("Key_A", Long.toString(i));
       map.put("Key_B", now.minus(Duration.standardSeconds(30)).toString());
 
       return map;

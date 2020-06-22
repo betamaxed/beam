@@ -27,6 +27,7 @@ import java.util.Arrays;
 import java.util.List;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryOptions;
+import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.testing.NeedsRunner;
 import org.apache.beam.sdk.testing.PAssert;
@@ -34,6 +35,7 @@ import org.apache.beam.sdk.testing.TestPipeline;
 import org.apache.beam.sdk.testing.UsesStatefulParDo;
 import org.apache.beam.sdk.transforms.Create;
 import org.apache.beam.sdk.transforms.join.CoGbkResult;
+import org.apache.beam.sdk.transforms.windowing.IntervalWindow;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.TupleTag;
@@ -152,6 +154,33 @@ public class SnippetsTest implements Serializable {
     PAssert.that(actualFormattedResults).containsInAnyOrder(formattedResults);
 
     p.run();
+  }
+
+  @Test
+  @Category({NeedsRunner.class, UsesStatefulParDo.class})
+  public void testSideInputPatterns() throws InterruptedException {
+
+    Duration fixedWindowDuration = Duration.standardSeconds(1);
+    int sideInputMultiple = 3;
+    int checkNumWindows = 2;
+
+    PCollection<KV<Long, Long>> results = Snippets.sideInputPatterns(p, fixedWindowDuration, sideInputMultiple);
+
+    final List<KV<Long, Long>> expectedResults = new ArrayList<>();
+    for (long sideInputIndex = 0; sideInputIndex < checkNumWindows; sideInputIndex++)
+    {
+      for (long j = 0; j < sideInputMultiple; j++)
+      {
+        long contentIndex = sideInputIndex * sideInputMultiple + j;
+        expectedResults.add(KV.of(contentIndex, sideInputIndex));
+      }
+    }
+
+    p.run();
+    IntervalWindow window = new IntervalWindow(
+            new Instant(0),
+            fixedWindowDuration.multipliedBy(checkNumWindows).multipliedBy(checkNumWindows));
+    PAssert.that(results).inWindow(window).containsInAnyOrder(expectedResults);
   }
 
   @Test
